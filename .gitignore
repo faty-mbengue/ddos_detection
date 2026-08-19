@@ -1,0 +1,36 @@
+# Secrets et configuration locale
+.env
+.env.local
+!.env.example
+
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Artefacts du modele (deposes manuellement, souvent volumineux)
+backend/app/ml/artifacts/*.joblib
+backend/app/ml/artifacts/*.pkl
+backend/app/ml/artifacts/metadata.json
+
+# Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Captures reseau
+*.pcap
+*.pcapng
+
+# Systeme et editeurs
+.DS_Store
+*.log
+.vscode/*
+!.vscode/extensions.json
+.idea/
+Description_systeme.docx
+Rapport_Memoire_Fatou Mbengue.docx
+WhatsApp Image 2026-08-14 at 07.52.50.jpeg

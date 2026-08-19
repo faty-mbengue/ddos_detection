@@ -1,0 +1,44 @@
+[project]
+name = "ddos-monitor-backend"
+version = "1.0.0"
+description = "API de surveillance et de detection des attaques DDoS en temps reel (CICDDoS2019 / Random Forest)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.118.0",
+    "uvicorn[standard]>=0.37.0",
+    "sqlalchemy>=2.0.36",
+    "psycopg[binary]>=3.2.3",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "bcrypt==4.0.1",
+    "python-multipart>=0.0.20",
+    "scikit-learn>=1.6.0",
+    "pandas>=2.2.3",
+    "numpy>=2.1.0",
+    "joblib>=1.4.2",
+    "email-validator>=2.2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+    "httpx>=0.28.1",
+    "ruff>=0.8.4",
+]
+
+[tool.pytest.ini_options]
+# La racine du projet est ajoutee au sys.path : `app` est importable sans installation
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]

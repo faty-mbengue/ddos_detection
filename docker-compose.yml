@@ -1,0 +1,156 @@
+# DDoS Monitor — plateforme de surveillance et de detection des attaques DDoS
+#
+#   docker compose up -d --build     demarre db + backend + frontend
+#   Interface : http://localhost:8080
+#   API       : http://localhost:8000/docs
+#
+# Comptes initiaux : admin / admin123 et analyst / analyst123
+# (a changer immediatement via FIRST_ADMIN_PASSWORD ou l'interface d'administration)
+
+name: ddos-monitor
+
+services:
+  # ── Base de donnees PostgreSQL ──────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: ddos-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ddos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ddos}
+      POSTGRES_DB: ${POSTGRES_DB:-ddos_monitor}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      # Expose uniquement en local, pour inspection avec psql / pgAdmin
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ddos} -d ${POSTGRES_DB:-ddos_monitor}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - ddos-net
+
+  # ── pgAdmin : consultation et administration de la base ─────────────────────
+  # Interface web sur http://localhost:5050. Le serveur "DDoS Monitor" est deja
+  # enregistre (servers.json) : il reste seulement a saisir le mot de passe
+  # PostgreSQL a la premiere connexion.
+  pgadmin:
+    image: dpage/pgadmin4:8.14
+    container_name: ddos-pgadmin
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # pgAdmin valide le format de l'adresse et refuse les TLD comme .local
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      # Evite l'ecran d'assistant au premier lancement
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_LISTEN_PORT: 80
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    networks:
+      - ddos-net
+
+  # ── API FastAPI : capture, detection, historique ────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ddos-backend
+    restart: unless-stopped
+    # Capacites noyau requises par les deux fonctions coeur du projet :
+    # capture de paquets (tshark/dumpcap) et pose de regles (iptables). Sans
+    # elles le conteneur tourne avec CapEff=0 : tshark ne voit aucune interface
+    # reelle et iptables repond « Operation not permitted ». A retirer si seuls
+    # les modes simulator ou external sont utilises.
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ddos}:${POSTGRES_PASSWORD:-ddos}@db:5432/${POSTGRES_DB:-ddos_monitor}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production-please-use-a-long-random-value}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DEBUG: ${DEBUG:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173}
+
+      FIRST_ADMIN_USERNAME: ${FIRST_ADMIN_USERNAME:-admin}
+      FIRST_ADMIN_EMAIL: ${FIRST_ADMIN_EMAIL:-admin@ddos-monitor.local}
+      FIRST_ADMIN_PASSWORD: ${FIRST_ADMIN_PASSWORD:-admin123}
+
+      # Capture : "simulator" par defaut (aucun privilege requis).
+      # Pour une capture reelle avec tshark : docker-compose.capture.yml
+      CAPTURE_BACKEND: ${CAPTURE_BACKEND:-simulator}
+      CAPTURE_INTERFACE: ${CAPTURE_INTERFACE:-eth0}
+      CAPTURE_ENABLED: ${CAPTURE_ENABLED:-true}
+      # Pare-feu : sans ces deux variables, .env etait ignore et le blocage
+      # restait un simple inventaire. iptables exige en plus NET_ADMIN.
+      FIREWALL_ENABLED: ${FIREWALL_ENABLED:-false}
+      FIREWALL_BACKEND: ${FIREWALL_BACKEND:-none}
+      ANALYSIS_INTERVAL_SECONDS: ${ANALYSIS_INTERVAL_SECONDS:-15}
+
+      ATTACK_CONFIDENCE_THRESHOLD: ${ATTACK_CONFIDENCE_THRESHOLD:-0.70}
+      ATTACK_FLOW_THRESHOLD: ${ATTACK_FLOW_THRESHOLD:-3}
+
+      # Alertes email (Gmail par defaut). SMTP_PASSWORD doit etre un
+      # « mot de passe d'application » Google, jamais le mot de passe du compte,
+      # et se renseigne dans .env qui n'est pas versionne.
+      ALERT_EMAIL_ENABLED: ${ALERT_EMAIL_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      ALERT_RECIPIENTS: ${ALERT_RECIPIENTS:-}
+    volumes:
+      # Deposer ici les artefacts du notebook CICDDoS2019 pour remplacer le
+      # modele de demonstration : model.joblib, scaler.joblib, metadata.json
+      - ./backend/app/ml/artifacts:/app/app/ml/artifacts
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    networks:
+      - ddos-net
+
+  # ── Interface React servie par nginx (relais /api et /ws) ───────────────────
+  #
+  # nginx n'est PAS un service separe : il est *embarque* dans l'image de ce
+  # service. Le Dockerfile du frontend compile le bundle React (etape node) puis
+  # le copie dans une image nginx (etape finale). Ce conteneur fait donc deux
+  # choses a la fois :
+  #   1. servir les fichiers statiques de l'interface ;
+  #   2. relayer /api et /ws vers le backend (voir frontend/nginx.conf).
+  # C'est pourquoi une seule URL suffit : http://localhost:8080
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ddos-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    networks:
+      - ddos-net
+
+volumes:
+  db_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  ddos-net:
+    driver: bridge

@@ -1,0 +1,23 @@
+# Surcouche pour activer le BLOCAGE REEL des adresses IP, sans toucher au mode
+# reseau. A combiner avec le fichier principal :
+#
+#   docker compose -f docker-compose.yml -f docker-compose.firewall.yml up -d
+#
+# Le conteneur reste sur le reseau bridge : les regles posees protegent le
+# conteneur lui-meme. Pour proteger l'hote, combiner plutot avec
+# docker-compose.capture.yml (network_mode: host), ou deployer la sonde
+# directement sur la machine a proteger.
+#
+# Attention : couple a `auto_block`, un faux positif du modele coupera du trafic
+# legitime. Testez d'abord avec le blocage automatique desactive.
+
+services:
+  backend:
+    # NET_ADMIN autorise iptables, NET_RAW la capture. La capability n'est
+    # utilisable que parce que le Dockerfile l'a posee sur le binaire concerne.
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      FIREWALL_ENABLED: "true"
+      FIREWALL_BACKEND: iptables

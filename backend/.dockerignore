@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example
+# Les artefacts du modele ne sont PAS copies dans l'image : ils arrivent par le
+# volume declare dans docker-compose.yml. Sans cette exclusion, un modele de
+# 1 Go alourdirait l'image d'autant, a construire et a pousser sur le serveur.
+# L'image embarque uniquement le modele de demonstration, entraine au build.
+app/ml/artifacts/*.joblib
+app/ml/artifacts/*.pkl
+app/ml/artifacts/*.txt
+app/ml/artifacts/metadata.json
+*.md
+tests/

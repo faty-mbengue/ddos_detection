@@ -1,0 +1,35 @@
+# Surcouche pour la capture REELLE du trafic avec tshark.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.capture.yml up -d --build
+#
+# Le backend passe sur le reseau de l'hote et recoit les capabilities necessaires
+# a la capture de paquets. Adaptez CAPTURE_INTERFACE a votre machine
+# (`ip link` sous Linux : eth0, ens33, wlan0 …).
+#
+# Attention : en network_mode host, le backend n'est plus joignable par son nom de
+# service. Le frontend est donc lui aussi bascule sur le reseau hote et relaie
+# vers 127.0.0.1:8000.
+
+services:
+  backend:
+    # !reset retire le reseau bridge herite : network_mode et networks sont exclusifs
+    networks: !reset null
+    network_mode: host
+    # uvicorn ecoute directement sur le port 8000 de l'hote
+    ports: !reset []
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      CAPTURE_BACKEND: tshark
+      CAPTURE_INTERFACE: ${CAPTURE_INTERFACE:-eth0}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ddos}:${POSTGRES_PASSWORD:-ddos}@127.0.0.1:5432/${POSTGRES_DB:-ddos_monitor}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173}
+
+  frontend:
+    networks: !reset null
+    network_mode: host
+    # nginx ecoute sur 8080 directement sur l'hote : plus de mappage de ports
+    ports: !reset []
+    volumes:
+      - ./frontend/nginx.host.conf:/etc/nginx/conf.d/default.conf:ro

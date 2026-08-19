@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "DDoS Monitor",
+      "Group": "Serveurs",
+      "Host": "db",
+      "Port": 5432,
+      "MaintenanceDB": "ddos_monitor",
+      "Username": "ddos",
+      "SSLMode": "prefer",
+      "Comment": "Base du systeme DDoS Monitor. Le mot de passe est demande a la premiere connexion (valeur de POSTGRES_PASSWORD, 'ddos' par defaut)."
+    }
+  }
+}
